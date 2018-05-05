@@ -1,0 +1,3 @@
+0 subject/sound.wav
+1 recog.wav
+2 temp.wav
