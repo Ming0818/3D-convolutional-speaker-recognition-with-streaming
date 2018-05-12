@@ -17,7 +17,7 @@ class DVectorNet(tf.keras.Model):
         self.out_dim = out_dim
         self.checkpoint_directory = checkpoint_directory
         self.batch_size = batch_size
-        self.device_name=device_name
+        self.device_name = device_name
 
         # lstm cell
         self.rnn_cell = tf.nn.rnn_cell.BasicLSTMCell(64)
@@ -67,33 +67,67 @@ class DVectorNet(tf.keras.Model):
 
         return x
 
-    def loss(self, x, target):
-        predictions = self.predict(x)
+    def loss(self, x, target, seqlen, training=False):
+        predictions = self.predict(x, seqlen, training=training)
         loss_value = tf.losses.sparse_softmax_cross_entropy(predictions=predictions, labels=target)
         return loss_value
 
-    def grads(self, x, target):
+    def grads(self, x, target, seqlen,training=False):
         with tfe.GradientTape() as tape:
-            loss_value = self.loss(x, target)
+            loss_value = self.loss(x, target, seqlen, training=training)
         return tape.gradient(loss_value, self.variables)
 
     def fit(self,
-          x=None,
-          y=None,
-          batch_size=None,
-          epochs=1,
-          verbose=1,
-          callbacks=None,
-          validation_split=0.,
-          validation_data=None,
-          shuffle=True,
-          class_weight=None,
-          sample_weight=None,
-          initial_epoch=0,
-          steps_per_epoch=None,
-          validation_steps=None,
-          **kwargs):
-        pass
+            train_data=None,
+            eval_data=None,
+            batch_size=None,
+            epochs=1,
+            verbose=100,
+            callbacks=None,
+            validation_split=0.,
+            validation_data=None,
+            shuffle=True,
+            class_weight=None,
+            sample_weight=None,
+            initial_epoch=0,
+            steps_per_epoch=None,
+            validation_steps=None,
+            **kwargs):
+
+        train_acc = tfe.metrics.Accuracy('train_acc')
+        eval_acc = tfe.metrics.Accuracy('eval_acc')
+
+        self.history = {}
+        self.history['train_acc'] = []
+        self.history['eval_acc'] = []
+
+        with tf.device(self.device_name):
+            for i in range(epochs):
+                for X, y, seqlen in tfe.Iterator(train_data):
+                    grads = self.grads(x=X, target=y, seqlen=seqlen, training=True)
+                    self.optimizer.apply_gradients(zip(grads, self.variables))
+
+                for X, y, seqlen in tfe.Iterator(train_data):
+                    logits = self.predict(X, seqlen, False)
+                    preds = tf.argmax(logits, axis=1)
+                    train_acc(preds, y)
+
+                self.history['train_acc'].append(train_acc.result().numpy())
+
+                train_acc.init_variables()
+
+                # Check accuracy eval dataset
+                for X, y, seqlen in tfe.Iterator(eval_data):
+                    logits = self.predict(X, seqlen, False)
+                    preds = tf.argmax(logits, axis=1)
+                    eval_acc(preds, y)
+                self.history['eval_acc'].append(eval_acc.result().numpy())
+                # Reset metrics
+                eval_acc.init_variables()
+
+                if (i==0) | ((i+1)%verbose==0):
+                    print('Train accuracy at epoch %d: ' %(i+1), self.history['train_acc'][-1])
+                    print('Eval accuracy at epoch %d: ' %(i+1), self.history['eval_acc'][-1])
 
 
 def main():
@@ -103,17 +137,19 @@ def main():
     for i in range(200):
         x, _ = wav2cubes("recog.wav")
         input_cube.append(x)
-        seq.append((i%30)+ 1)
+        seq.append((i % 30) + 1)
 
-    input_cube = np.array(input_cube, dtype=np.float32).reshape(-1,30,800)
+    input_cube = np.array(input_cube, dtype=np.float32).reshape(-1, 30, 800)
     seq = np.array(seq)
-    ds = tf.data.Dataset.from_tensor_slices((input_cube, seq))
+    yy = np.random.rand((200))
+    ds = tf.data.Dataset.from_tensor_slices((input_cube, yy, seq))
+    ds2 = tf.data.Dataset.from_tensor_slices((input_cube, yy, seq))
     ds = ds.shuffle(buffer_size=10000).batch(32)
 
     model = DVectorNet((800,), 40, "./")
 
-    for X, seq_length in tfe.Iterator(ds):
-        break
+    model.fit(ds, ds2)
+
 
 
 if __name__ == "__main__":
