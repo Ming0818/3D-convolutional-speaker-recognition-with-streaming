@@ -37,9 +37,9 @@ class DVectorNet(tf.keras.Model):
 
         self.optimizer = tf.train.AdamOptimizer(LEARNING_RATE)
 
-    def predict(self, x, batch_size=None, verbose=0, steps=None, training=False):
+    def predict(self, x, verbose=0, steps=None, training=False):
         if isinstance(x, (np.ndarray, np.generic)):
-            x = np.reshape(x, self.input_dim)
+            x = np.reshape(x, (self.batch_size, -1) + self.input_dim)
             x = tf.convert_to_tensor(x)
 
         num_samples = tf.shape(x)[0]
@@ -82,3 +82,16 @@ class DVectorNet(tf.keras.Model):
           validation_steps=None,
           **kwargs):
         pass
+
+
+def main():
+    from preproecess import wav2cubes
+    input_cube = wav2cubes("recog.wav")
+    for i in range(5):
+        input_cube = np.concatenate((input_cube,input_cube.copy()))
+
+    model = DVectorNet((800,), 40, "./")
+    print(model.predict(input_cube))
+
+if __name__ == "__main__":
+    main()
