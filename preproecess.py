@@ -51,9 +51,10 @@ def wav2cubes(wavfile, num_frames=20, num_coefficient=40, max_seqlen=30):
             break
         feature_cube.append(logenergy[start_point:start_point + num_frames, :].tolist())
         count += 1
-    if count < max_seqlen :
-        padding_arr = np.zeros((max_seqlen-count-1, num_frames, num_coefficient)).tolist()
+    if count < max_seqlen:
+        padding_arr = np.zeros((max_seqlen-count, num_frames, num_coefficient)).tolist()
         feature_cube = feature_cube + padding_arr
+
     return np.array(feature_cube).reshape((-1,max_seqlen,num_frames,num_coefficient)), np.array(count).reshape((-1,1))
 
 
