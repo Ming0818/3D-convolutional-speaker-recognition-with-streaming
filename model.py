@@ -20,7 +20,7 @@ class DVectorNet(tf.keras.Model):
         self.device_name=device_name
 
         # lstm cell
-        self.rnn_cell = tf.nn.rnn_cell.BasicLSTMCell(self.batch_size)
+        self.rnn_cell = tf.nn.rnn_cell.BasicLSTMCell(64)
 
         # cnn
         # self.conv1 = tf.layers.Conv2D(32, 8, 8, padding='same', activation=tf.nn.relu)
@@ -37,19 +37,31 @@ class DVectorNet(tf.keras.Model):
 
         self.optimizer = tf.train.AdamOptimizer(LEARNING_RATE)
 
-    def predict(self, x, verbose=0, steps=None, training=False):
-        if isinstance(x, (np.ndarray, np.generic)):
-            x = np.reshape(x, (self.batch_size, -1) + self.input_dim)
-            x = tf.convert_to_tensor(x)
+    def predict(self, X, seq_length, verbose=0, steps=None, training=False):
+        # Get the number of samples within a batch
+        num_samples = tf.shape(X)[0]
 
-        num_samples = tf.shape(x)[0]
+        # Initialize LSTM cell state with zeros
         state = self.rnn_cell.zero_state(num_samples, dtype=tf.float32)
-        unstacked_input = tf.unstack(x, axis=1)
 
-        for input_step in unstacked_input:
+        # Unstack
+        unstacked = tf.unstack(X, axis=1)
+
+        # Iterate through each timestep and append the predictions
+        outputs = []
+        for input_step in unstacked:
             output, state = self.rnn_cell(input_step, state)
+            outputs.append(output)
 
-        x = self.dense1(x)
+        # Stack outputs to (batch_size, time_steps, cell_size)
+        outputs = tf.stack(outputs, axis=1)
+
+        # Extract the output of the last time step, of each sample
+        idxs_last_output = tf.stack([tf.range(num_samples),
+                                     tf.cast(seq_length - 1, tf.int32)], axis=1)
+        final_output = tf.gather_nd(outputs, idxs_last_output)
+
+        x = self.dense1(final_output)
         x = self.batch1(x, training=training)
         x = self.dense2(x)
 
@@ -57,7 +69,7 @@ class DVectorNet(tf.keras.Model):
 
     def loss(self, x, target):
         predictions = self.predict(x)
-        loss_value = tf.losses.mean_squared_error(predictions=predictions, labels=target)
+        loss_value = tf.losses.sparse_softmax_cross_entropy(predictions=predictions, labels=target)
         return loss_value
 
     def grads(self, x, target):
@@ -86,12 +98,23 @@ class DVectorNet(tf.keras.Model):
 
 def main():
     from preproecess import wav2cubes
-    input_cube = wav2cubes("recog.wav")
-    for i in range(5):
-        input_cube = np.concatenate((input_cube,input_cube.copy()))
-    print(input_cube.shape)
+    input_cube = list()
+    seq = list()
+    for i in range(200):
+        x, _ = wav2cubes("recog.wav")
+        input_cube.append(x)
+        seq.append((i%30)+ 1)
+
+    input_cube = np.array(input_cube, dtype=np.float32).reshape(-1,30,800)
+    seq = np.array(seq)
+    ds = tf.data.Dataset.from_tensor_slices((input_cube, seq))
+    ds = ds.shuffle(buffer_size=10000).batch(32)
+
     model = DVectorNet((800,), 40, "./")
-    print(model.predict(input_cube))
+
+    for X, seq_length in tfe.Iterator(ds):
+        break
+
 
 if __name__ == "__main__":
     main()
