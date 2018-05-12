@@ -27,7 +27,7 @@ def chunk2cube(chunk, sampling_frequency, num_coefficient=40, frame_length=0.025
     return feature_cube[None, :, :, :]
 
 
-def wav2cubes(wavfile, num_frames=20, num_coefficient=40):
+def wav2cubes(wavfile, num_frames=20, num_coefficient=40, max_seqlen=30):
     signal, fs = sf.read(wavfile)
     # Staching frames
 
@@ -43,16 +43,22 @@ def wav2cubes(wavfile, num_frames=20, num_coefficient=40):
     #     feature_cube[num, :, :] = logenergy[index:index + 20, :]
 
     # sequential sampling(size = 20(*0.025 sec) * 40(coefficient)), using overlapping(10 frame interval)
-    feature_cube = np.zeros((1, num_frames, num_coefficient), dtype=np.float32)
+    feature_cube = list()
 
+    count = 0
     for num, start_point in enumerate(range(0, logenergy.shape[0] - num_frames, 10)):
-        feature_cube = np.concatenate(
-            (feature_cube, logenergy[start_point:start_point + num_frames, :].reshape(-1, num_frames, num_coefficient)))
-    return feature_cube[None, 1:, :, :].astype(np.float32)
+        if count > max_seqlen :
+            break
+        feature_cube.append(logenergy[start_point:start_point + num_frames, :].tolist())
+        count += 1
+    if count < max_seqlen :
+        padding_arr = np.zeros((max_seqlen-count, num_frames, num_coefficient)).tolist()
+        feature_cube = feature_cube + padding_arr
+    return np.array(feature_cube), count
 
 
 def main():
-    print(wav2cubes("recog.wav").shape)
+    print(len(wav2cubes("recog.wav")[0]))
 
 
 if __name__ == '__main__':
