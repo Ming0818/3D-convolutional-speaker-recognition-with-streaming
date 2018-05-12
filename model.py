@@ -46,7 +46,6 @@ class DVectorNet(tf.keras.Model):
 
         # Unstack
         unstacked = tf.unstack(X, axis=1)
-
         # Iterate through each timestep and append the predictions
         outputs = []
         for input_step in unstacked:
@@ -69,7 +68,7 @@ class DVectorNet(tf.keras.Model):
 
     def loss(self, x, target, seqlen, training=False):
         predictions = self.predict(x, seqlen, training=training)
-        loss_value = tf.losses.sparse_softmax_cross_entropy(predictions=predictions, labels=target)
+        loss_value = tf.losses.sparse_softmax_cross_entropy(logits=predictions, labels=target)
         return loss_value
 
     def grads(self, x, target, seqlen,training=False):
@@ -81,7 +80,7 @@ class DVectorNet(tf.keras.Model):
             train_data=None,
             eval_data=None,
             batch_size=None,
-            epochs=1,
+            epochs=500,
             verbose=100,
             callbacks=None,
             validation_split=0.,
@@ -141,12 +140,20 @@ def main():
 
     input_cube = np.array(input_cube, dtype=np.float32).reshape(-1, 30, 800)
     seq = np.array(seq)
-    yy = np.random.rand((200))
+    # yy = np.zeros((200,30), dtype=np.int32)
+    # for i in range(200):
+    #     import random
+    #     t = random.randint(0,29)
+    #     yy[i,t] = 1
+
+    yy = np.random.randint(0,30,(200,1))
+
     ds = tf.data.Dataset.from_tensor_slices((input_cube, yy, seq))
     ds2 = tf.data.Dataset.from_tensor_slices((input_cube, yy, seq))
     ds = ds.shuffle(buffer_size=10000).batch(32)
+    ds2 = ds2.shuffle(buffer_size=10000).batch(32)
 
-    model = DVectorNet((800,), 40, "./")
+    model = DVectorNet((800,), 30, "./")
 
     model.fit(ds, ds2)
 
