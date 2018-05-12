@@ -27,7 +27,7 @@ def chunk2cube(chunk, sampling_frequency, num_coefficient=40, frame_length=0.025
     return feature_cube[None, :, :, :]
 
 
-def wav2cubes(wavfile, num_frames, num_coefficient=40):
+def wav2cubes(wavfile, num_frames=20, num_coefficient=40):
     signal, fs = sf.read(wavfile)
     # Staching frames
 

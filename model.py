@@ -89,7 +89,7 @@ def main():
     input_cube = wav2cubes("recog.wav")
     for i in range(5):
         input_cube = np.concatenate((input_cube,input_cube.copy()))
-
+    print(input_cube.shape)
     model = DVectorNet((800,), 40, "./")
     print(model.predict(input_cube))
 
