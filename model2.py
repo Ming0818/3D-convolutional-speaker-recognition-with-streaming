@@ -242,8 +242,8 @@ class DVectorNet(tf.keras.Model):
 
     def loss(self, input_tensor, target, training=False):
         predictions = self.call(input_tensor, training=training)
-        loss_value = tf.losses.sparse_softmax_cross_entropy(logits=predictions, labels=target)
-        return loss_value
+        loss_value = tf.losses.softmax_cross_entropy(logits=predictions, onehot_labels=target)
+         return loss_value
 
     def grads(self, input_tensor, target, training=False):
         with tfe.GradientTape() as tape:
@@ -283,7 +283,7 @@ class DVectorNet(tf.keras.Model):
                 for X, y in tfe.Iterator(train_data):
                     logits = self.call(input_tensor=X, training=False)
                     preds = tf.argmax(logits, axis=1)
-                    train_acc(preds, y)
+                    train_acc(preds, np.argmax(y, axis=1))
 
                 self.history['train_acc'].append(train_acc.result().numpy())
 
@@ -293,7 +293,7 @@ class DVectorNet(tf.keras.Model):
                 for X, y in tfe.Iterator(eval_data):
                     logits = self.call(input_tensor=X, training=False)
                     preds = tf.argmax(logits, axis=1)
-                    eval_acc(preds, y)
+                    eval_acc(preds, np.argmax(y, axis=1))
                 self.history['eval_acc'].append(eval_acc.result().numpy())
                 # Reset metrics
                 eval_acc.init_variables()
@@ -319,8 +319,11 @@ def main():
 
     yy = np.random.randint(0, 30, (200, 1))
 
-    ds = tf.data.Dataset.from_tensor_slices((input_cube, yy))
-    ds2 = tf.data.Dataset.from_tensor_slices((input_cube, yy))
+    nb_classes = 30
+    one_hot_targets = np.eye(nb_classes)[yy].reshape(-1,30)
+
+    ds = tf.data.Dataset.from_tensor_slices((input_cube, one_hot_targets))
+    ds2 = tf.data.Dataset.from_tensor_slices((input_cube, one_hot_targets))
     ds = ds.shuffle(buffer_size=10000).batch(32)
     ds2 = ds2.shuffle(buffer_size=10000).batch(32)
 
