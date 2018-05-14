@@ -200,12 +200,14 @@ class DVectorNet(tf.keras.Model):
         self.l5b = id_block([512, 512, 2048], stage=5, block='b')
         self.l5c = id_block([512, 512, 2048], stage=5, block='c')
 
-        self.avg_pool = layers.AveragePooling2D(
-            (7, 7), strides=(7, 7))
+        # self.avg_pool = layers.AveragePooling2D(
+        #     (7, 7), strides=(7, 7), data_format='channels_first')
 
         self.flatten = layers.Flatten()
         self.dvector = layers.Dense(2048, name='dvector', activation=tf.nn.relu)
         self.fc1000 = layers.Dense(out_dim, name='fc1000', activation=tf.nn.softmax)
+
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE)
 
     def call(self, input_tensor, training=False):
         x = self.conv1(input_tensor)
@@ -214,7 +216,6 @@ class DVectorNet(tf.keras.Model):
         x = self.max_pool(x)
 
         x = self.l2a(x, training=training)
-        print "here"
         x = self.l2b(x, training=training)
         x = self.l2c(x, training=training)
 
@@ -233,16 +234,10 @@ class DVectorNet(tf.keras.Model):
         x = self.l5a(x, training=training)
         x = self.l5b(x, training=training)
         x = self.l5c(x, training=training)
-        print "here"
-
-        x = self.avg_pool(x)
-        print "here1"
 
         x = self.dvector(self.flatten(x))
-        print "here2"
 
         x = self.fc1000(x)
-        print "here3"
         return x
 
     def loss(self, input_tensor, target, training=False):
@@ -286,7 +281,7 @@ class DVectorNet(tf.keras.Model):
                     self.optimizer.apply_gradients(zip(grads, self.variables))
 
                 for X, y in tfe.Iterator(train_data):
-                    logits = self.call(input_tensor=X, target=y, training=False)
+                    logits = self.call(input_tensor=X, training=False)
                     preds = tf.argmax(logits, axis=1)
                     train_acc(preds, y)
 
@@ -296,7 +291,7 @@ class DVectorNet(tf.keras.Model):
 
                 # Check accuracy eval dataset
                 for X, y in tfe.Iterator(eval_data):
-                    logits = self.call(input_tensor=X, target=y, training=False)
+                    logits = self.call(input_tensor=X, training=False)
                     preds = tf.argmax(logits, axis=1)
                     eval_acc(preds, y)
                 self.history['eval_acc'].append(eval_acc.result().numpy())
