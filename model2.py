@@ -243,6 +243,7 @@ class DVectorNet(tf.keras.Model):
     def loss(self, input_tensor, target, training=False):
         predictions = self.call(input_tensor, training=training)
         loss_value = tf.losses.softmax_cross_entropy(logits=predictions, onehot_labels=target)
+        self.loss_sum+=loss_value
         return loss_value
 
     def grads(self, input_tensor, target, training=False):
@@ -276,6 +277,7 @@ class DVectorNet(tf.keras.Model):
 
         with tf.device(self.device_name):
             for i in range(epochs):
+                self.loss_sum = 0
                 for X, y in tfe.Iterator(train_data):
                     grads = self.grads(input_tensor=X, target=y, training=True)
                     self.optimizer.apply_gradients(zip(grads, self.variables))
@@ -283,6 +285,7 @@ class DVectorNet(tf.keras.Model):
                 for X, y in tfe.Iterator(train_data):
                     logits = self.call(input_tensor=X, training=False)
                     preds = tf.argmax(logits, axis=1)
+
                     train_acc(preds, np.argmax(y, axis=1))
 
                 self.history['train_acc'].append(train_acc.result().numpy())
@@ -301,7 +304,7 @@ class DVectorNet(tf.keras.Model):
                 if (i == 0) | ((i + 1) % verbose == 0):
                     print('Train accuracy at epoch %d: ' % (i + 1), self.history['train_acc'][-1])
                     print('Eval accuracy at epoch %d: ' % (i + 1), self.history['eval_acc'][-1])
-                    print('')
+                    print('Loss : %s' % self.loss_sum)
 
 
 def main():
@@ -322,7 +325,7 @@ def main():
 
     num_classes = 90
     targets =ys.reshape(-1)
-    one_hot = np.eye(num_classes)[targets]
+    one_hot = np.eye(num_classes)[targets].astype("float32")
     ys =one_hot
     from sklearn.model_selection import train_test_split
 
@@ -333,7 +336,7 @@ def main():
 
     model = DVectorNet((20, 40), num_classes, "./", device_name="gpu:0")
 
-    model.fit(ds_train, ds_test, epochs=100000, verbose=20)
+    model.fit(ds_train, ds_test, epochs=100000, verbose=1)
     model.save("temp.ckpt")
 
 
