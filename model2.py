@@ -6,7 +6,7 @@ import numpy as np
 tfe.enable_eager_execution(device_policy=tfe.DEVICE_PLACEMENT_SILENT)
 
 # Hyper parameters
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.01
 
 layers = tf.keras.layers
 
@@ -243,7 +243,7 @@ class DVectorNet(tf.keras.Model):
     def loss(self, input_tensor, target, training=False):
         predictions = self.call(input_tensor, training=training)
         loss_value = tf.losses.softmax_cross_entropy(logits=predictions, onehot_labels=target)
-         return loss_value
+        return loss_value
 
     def grads(self, input_tensor, target, training=False):
         with tfe.GradientTape() as tape:
@@ -304,32 +304,36 @@ class DVectorNet(tf.keras.Model):
 
 
 def main():
-    from preproecess import wav2cubes
-    input_cube = list()
-    for i in range(200):
-        x, _ = wav2cubes("recog.wav")
-        input_cube.append(x)
+    from glob import glob
+    import h5py
+    xs = list()
+    ys = list()
 
-    input_cube = np.array(input_cube, dtype=np.float32).reshape(-1, 30, 20, 40)
-    # yy = np.zeros((200,30), dtype=np.int32)
-    # for i in range(200):
-    #     import random
-    #     t = random.randint(0,29)
-    #     yy[i,t] = 1
+    for i, fname in enumerate(glob("data_array/*_0.h5")):
+        print
+        h5f = h5py.File(fname, 'r')
+        xs.append(h5f['utterances'][:].astype(np.float32))
+        ys.append(h5f['labels'][:])
+        h5f.close()
 
-    yy = np.random.randint(0, 30, (200, 1))
+    xs = np.concatenate(xs, axis=0)
+    ys = np.concatenate(ys, axis=0)
 
-    nb_classes = 30
-    one_hot_targets = np.eye(nb_classes)[yy].reshape(-1,30)
+    num_classes = 30
+    targets =ys.reshape(-1)
+    one_hot = np.eye(num_classes)[targets]
+    ys =one_hot
+    from sklearn.model_selection import train_test_split
 
-    ds = tf.data.Dataset.from_tensor_slices((input_cube, one_hot_targets))
-    ds2 = tf.data.Dataset.from_tensor_slices((input_cube, one_hot_targets))
-    ds = ds.shuffle(buffer_size=10000).batch(32)
-    ds2 = ds2.shuffle(buffer_size=10000).batch(32)
+    xs_train, xs_test, ys_train, ys_test = train_test_split(xs, ys, test_size=0.33, random_state=42)
+    del xs, ys
+    ds_train = tf.data.Dataset.from_tensor_slices((xs_train, ys_train)).shuffle(buffer_size=10000).batch(32)
+    ds_test = tf.data.Dataset.from_tensor_slices((xs_test, ys_test)).shuffle(buffer_size=10000).batch(32)
 
     model = DVectorNet((20, 40), 30, "./", device_name="gpu:0")
 
-    model.fit(ds, ds2)
+    model.fit(ds_train, ds_test, epochs=100000)
+    model.save("temp.ckpt")
 
 
 if __name__ == "__main__":
