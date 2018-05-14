@@ -12,134 +12,138 @@ layers = tf.keras.layers
 
 
 class _IdentityBlock(tf.keras.Model):
-  """_IdentityBlock is the block that has no conv layer at shortcut.
-  Args:
-    kernel_size: the kernel size of middle conv layer at main path
-    filters: list of integers, the filters of 3 conv layer at main path
-    stage: integer, current stage label, used for generating layer names
-    block: 'a','b'..., current block label, used for generating layer names
-    data_format: data_format for the input ('channels_first' or
-      'channels_last').
-  """
-
-  def __init__(self, kernel_size, filters, stage, block):
-    super(_IdentityBlock, self).__init__(name='')
-    filters1, filters2, filters3 = filters
-
-    conv_name_base = 'res' + str(stage) + block + '_branch'
-    bn_name_base = 'bn' + str(stage) + block + '_branch'
-    bn_axis = 1
-
-    self.conv2a = layers.Conv2D(
-        filters1, (1, 1), name=conv_name_base + '2a')
-    self.bn2a = layers.BatchNormalization(
-        axis=bn_axis, name=bn_name_base + '2a')
-
-    self.conv2b = layers.Conv2D(
-        filters2,
-        kernel_size,
-        padding='same',
-        name=conv_name_base + '2b')
-    self.bn2b = layers.BatchNormalization(
-        axis=bn_axis, name=bn_name_base + '2b')
-
-    self.conv2c = layers.Conv2D(
-        filters3, (1, 1), name=conv_name_base + '2c')
-    self.bn2c = layers.BatchNormalization(
-        axis=bn_axis, name=bn_name_base + '2c')
-
-  def call(self, input_tensor, training=False):
-    x = self.conv2a(input_tensor)
-    x = self.bn2a(x, training=training)
-    x = tf.nn.relu(x)
-
-    x = self.conv2b(x)
-    x = self.bn2b(x, training=training)
-    x = tf.nn.relu(x)
-
-    x = self.conv2c(x)
-    x = self.bn2c(x, training=training)
-
-    x += input_tensor
-    return tf.nn.relu(x)
-
-
-class _ConvBlock(tf.keras.Model):
-  """_ConvBlock is the block that has a conv layer at shortcut.
-  Args:
+    """_IdentityBlock is the block that has no conv layer at shortcut.
+    Args:
       kernel_size: the kernel size of middle conv layer at main path
       filters: list of integers, the filters of 3 conv layer at main path
       stage: integer, current stage label, used for generating layer names
       block: 'a','b'..., current block label, used for generating layer names
       data_format: data_format for the input ('channels_first' or
         'channels_last').
-      strides: strides for the convolution. Note that from stage 3, the first
-       conv layer at main path is with strides=(2,2), and the shortcut should
-       have strides=(2,2) as well.
-  """
+    """
 
-  def __init__(self,
-               kernel_size,
-               filters,
-               stage,
-               block,
-               strides=(2, 2)):
-    super(_ConvBlock, self).__init__(name='')
-    filters1, filters2, filters3 = filters
+    def __init__(self, kernel_size, filters, stage, block):
+        super(_IdentityBlock, self).__init__(name='')
+        filters1, filters2, filters3 = filters
 
-    conv_name_base = 'res' + str(stage) + block + '_branch'
-    bn_name_base = 'bn' + str(stage) + block + '_branch'
-    bn_axis = 1
+        conv_name_base = 'res' + str(stage) + block + '_branch'
+        bn_name_base = 'bn' + str(stage) + block + '_branch'
+        bn_axis = 1
 
-    self.conv2a = layers.Conv2D(
-        filters1, (1, 1),
-        strides=strides,
-        name=conv_name_base + '2a')
+        self.conv2a = layers.Conv2D(
+            filters1, (1, 1), name=conv_name_base + '2a')
+        self.bn2a = layers.BatchNormalization(
+            axis=bn_axis, name=bn_name_base + '2a')
 
-    self.bn2a = layers.BatchNormalization(
-        axis=bn_axis, name=bn_name_base + '2a')
+        self.conv2b = layers.Conv2D(
+            filters2,
+            kernel_size,
+            padding='same',
+            name=conv_name_base + '2b')
+        self.bn2b = layers.BatchNormalization(
+            axis=bn_axis, name=bn_name_base + '2b')
 
-    self.conv2b = layers.Conv2D(
-        filters2,
-        kernel_size,
-        padding='same',
-        name=conv_name_base + '2b')
+        self.conv2c = layers.Conv2D(
+            filters3, (1, 1), name=conv_name_base + '2c')
+        self.bn2c = layers.BatchNormalization(
+            axis=bn_axis, name=bn_name_base + '2c')
 
-    self.bn2b = layers.BatchNormalization(
-        axis=bn_axis, name=bn_name_base + '2b')
+    def __call__(self, input_tensor, training=False):
+        return self.call(input_tensor=input_tensor, training=training)
 
-    self.conv2c = layers.Conv2D(
-        filters3, (1, 1), name=conv_name_base + '2c')
-    self.bn2c = layers.BatchNormalization(
-        axis=bn_axis, name=bn_name_base + '2c')
+    def call(self, input_tensor, training=False):
+        x = self.conv2a(input_tensor)
+        x = self.bn2a(x, training=training)
+        x = tf.nn.relu(x)
 
-    self.conv_shortcut = layers.Conv2D(
-        filters3, (1, 1),
-        strides=strides,
-        name=conv_name_base + '1')
+        x = self.conv2b(x)
+        x = self.bn2b(x, training=training)
+        x = tf.nn.relu(x)
 
-    self.bn_shortcut = layers.BatchNormalization(
-        axis=bn_axis, name=bn_name_base + '1')
+        x = self.conv2c(x)
+        x = self.bn2c(x, training=training)
 
-  def call(self, input_tensor, training=False):
-    x = self.conv2a(input_tensor)
-    x = self.bn2a(x, training=training)
-    x = tf.nn.relu(x)
-
-    x = self.conv2b(x)
-    x = self.bn2b(x, training=training)
-    x = tf.nn.relu(x)
-
-    x = self.conv2c(x)
-    x = self.bn2c(x, training=training)
-
-    shortcut = self.conv_shortcut(input_tensor)
-    shortcut = self.bn_shortcut(shortcut, training=training)
-
-    x += shortcut
-    return tf.nn.relu(x)
+        x += input_tensor
+        return tf.nn.relu(x)
 
 
+class _ConvBlock(tf.keras.Model):
+    """_ConvBlock is the block that has a conv layer at shortcut.
+    Args:
+        kernel_size: the kernel size of middle conv layer at main path
+        filters: list of integers, the filters of 3 conv layer at main path
+        stage: integer, current stage label, used for generating layer names
+        block: 'a','b'..., current block label, used for generating layer names
+        data_format: data_format for the input ('channels_first' or
+          'channels_last').
+        strides: strides for the convolution. Note that from stage 3, the first
+         conv layer at main path is with strides=(2,2), and the shortcut should
+         have strides=(2,2) as well.
+    """
+
+    def __init__(self,
+                 kernel_size,
+                 filters,
+                 stage,
+                 block,
+                 strides=(2, 2)):
+        super(_ConvBlock, self).__init__(name='')
+        filters1, filters2, filters3 = filters
+
+        conv_name_base = 'res' + str(stage) + block + '_branch'
+        bn_name_base = 'bn' + str(stage) + block + '_branch'
+        bn_axis = 1
+
+        self.conv2a = layers.Conv2D(
+            filters1, (1, 1),
+            strides=strides,
+            name=conv_name_base + '2a')
+
+        self.bn2a = layers.BatchNormalization(
+            axis=bn_axis, name=bn_name_base + '2a')
+
+        self.conv2b = layers.Conv2D(
+            filters2,
+            kernel_size,
+            padding='same',
+            name=conv_name_base + '2b')
+
+        self.bn2b = layers.BatchNormalization(
+            axis=bn_axis, name=bn_name_base + '2b')
+
+        self.conv2c = layers.Conv2D(
+            filters3, (1, 1), name=conv_name_base + '2c')
+        self.bn2c = layers.BatchNormalization(
+            axis=bn_axis, name=bn_name_base + '2c')
+
+        self.conv_shortcut = layers.Conv2D(
+            filters3, (1, 1),
+            strides=strides,
+            name=conv_name_base + '1')
+
+        self.bn_shortcut = layers.BatchNormalization(
+            axis=bn_axis, name=bn_name_base + '1')
+
+    def __call__(self, input_tensor, training=False):
+        return self.call(input_tensor=input_tensor, training=training)
+
+    def call(self, input_tensor, training=False):
+        x = self.conv2a(input_tensor)
+        x = self.bn2a(x, training=training)
+        x = tf.nn.relu(x)
+
+        x = self.conv2b(x)
+        x = self.bn2b(x, training=training)
+        x = tf.nn.relu(x)
+
+        x = self.conv2c(x)
+        x = self.bn2c(x, training=training)
+
+        shortcut = self.conv_shortcut(input_tensor)
+        shortcut = self.bn_shortcut(shortcut, training=training)
+
+        x += shortcut
+        return tf.nn.relu(x)
 
 
 class DVectorNet(tf.keras.Model):
@@ -203,7 +207,6 @@ class DVectorNet(tf.keras.Model):
         self.dvector = layers.Dense(2048, name='dvector', activation=tf.nn.relu)
         self.fc1000 = layers.Dense(out_dim, name='fc1000', activation=tf.nn.softmax)
 
-
     def call(self, input_tensor, training=False):
         x = self.conv1(input_tensor)
         x = self.bn_conv1(x, training=training)
@@ -211,6 +214,7 @@ class DVectorNet(tf.keras.Model):
         x = self.max_pool(x)
 
         x = self.l2a(x, training=training)
+        print "here"
         x = self.l2b(x, training=training)
         x = self.l2c(x, training=training)
 
@@ -229,13 +233,17 @@ class DVectorNet(tf.keras.Model):
         x = self.l5a(x, training=training)
         x = self.l5b(x, training=training)
         x = self.l5c(x, training=training)
+        print "here"
 
         x = self.avg_pool(x)
+        print "here1"
 
         x = self.dvector(self.flatten(x))
-        x = self.fc1000(x)
-        return x
+        print "here2"
 
+        x = self.fc1000(x)
+        print "here3"
+        return x
 
     def loss(self, input_tensor, target, training=False):
         predictions = self.call(input_tensor, training=training)
@@ -295,9 +303,9 @@ class DVectorNet(tf.keras.Model):
                 # Reset metrics
                 eval_acc.init_variables()
 
-                if (i==0) | ((i+1)%verbose==0):
-                    print('Train accuracy at epoch %d: ' %(i+1), self.history['train_acc'][-1])
-                    print('Eval accuracy at epoch %d: ' %(i+1), self.history['eval_acc'][-1])
+                if (i == 0) | ((i + 1) % verbose == 0):
+                    print('Train accuracy at epoch %d: ' % (i + 1), self.history['train_acc'][-1])
+                    print('Eval accuracy at epoch %d: ' % (i + 1), self.history['eval_acc'][-1])
 
 
 def main():
@@ -314,17 +322,16 @@ def main():
     #     t = random.randint(0,29)
     #     yy[i,t] = 1
 
-    yy = np.random.randint(0,30,(200,1))
+    yy = np.random.randint(0, 30, (200, 1))
 
     ds = tf.data.Dataset.from_tensor_slices((input_cube, yy))
     ds2 = tf.data.Dataset.from_tensor_slices((input_cube, yy))
     ds = ds.shuffle(buffer_size=10000).batch(32)
     ds2 = ds2.shuffle(buffer_size=10000).batch(32)
 
-    model = DVectorNet((20,40), 30, "./", device_name="gpu:0")
+    model = DVectorNet((20, 40), 30, "./", device_name="gpu:0")
 
     model.fit(ds, ds2)
-
 
 
 if __name__ == "__main__":
