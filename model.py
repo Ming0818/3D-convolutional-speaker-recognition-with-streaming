@@ -81,7 +81,7 @@ class DVectorNet(tf.keras.Model):
             eval_data=None,
             batch_size=None,
             epochs=500,
-            verbose=100,
+            verbose=1,
             callbacks=None,
             validation_split=0.,
             validation_data=None,
@@ -102,10 +102,13 @@ class DVectorNet(tf.keras.Model):
 
         with tf.device(self.device_name):
             for i in range(epochs):
+                x = 0
                 for X, y, seqlen in tfe.Iterator(train_data):
+                    print(x)
                     grads = self.grads(x=X, target=y, seqlen=seqlen, training=True)
                     self.optimizer.apply_gradients(zip(grads, self.variables))
-
+                    x +=1
+                x = 0
                 for X, y, seqlen in tfe.Iterator(train_data):
                     logits = self.predict(X, seqlen, False)
                     preds = tf.argmax(logits, axis=1)
