@@ -301,6 +301,7 @@ class DVectorNet(tf.keras.Model):
                 if (i == 0) | ((i + 1) % verbose == 0):
                     print('Train accuracy at epoch %d: ' % (i + 1), self.history['train_acc'][-1])
                     print('Eval accuracy at epoch %d: ' % (i + 1), self.history['eval_acc'][-1])
+                    print('')
 
 
 def main():
@@ -309,7 +310,7 @@ def main():
     xs = list()
     ys = list()
 
-    for i, fname in enumerate(glob("data_array/*_0.h5")):
+    for i, fname in enumerate(glob("data_array/*_0.h5")+glob("data_array/*_1.h5")+glob("data_array/*_2.h5")):
         print
         h5f = h5py.File(fname, 'r')
         xs.append(h5f['utterances'][:].astype(np.float32))
@@ -319,7 +320,7 @@ def main():
     xs = np.concatenate(xs, axis=0)
     ys = np.concatenate(ys, axis=0)
 
-    num_classes = 30
+    num_classes = 90
     targets =ys.reshape(-1)
     one_hot = np.eye(num_classes)[targets]
     ys =one_hot
@@ -330,9 +331,9 @@ def main():
     ds_train = tf.data.Dataset.from_tensor_slices((xs_train, ys_train)).shuffle(buffer_size=10000).batch(32)
     ds_test = tf.data.Dataset.from_tensor_slices((xs_test, ys_test)).shuffle(buffer_size=10000).batch(32)
 
-    model = DVectorNet((20, 40), 30, "./", device_name="gpu:0")
+    model = DVectorNet((20, 40), num_classes, "./", device_name="gpu:0")
 
-    model.fit(ds_train, ds_test, epochs=100000)
+    model.fit(ds_train, ds_test, epochs=100000, verbose=20)
     model.save("temp.ckpt")
 
 
