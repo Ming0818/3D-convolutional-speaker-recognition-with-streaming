@@ -316,7 +316,7 @@ def main():
     for i, fname in enumerate(glob("data_array/*_0.h5")+glob("data_array/*_1.h5")+glob("data_array/*_2.h5")):
         print
         h5f = h5py.File(fname, 'r')
-        xs.append(h5f['utterances'][:].astype(np.float32))
+        xs.append(h5f['speechs'][:].astype(np.float32))
         ys.append(h5f['labels'][:])
         h5f.close()
 
