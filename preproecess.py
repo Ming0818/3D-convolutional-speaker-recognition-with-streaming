@@ -73,7 +73,7 @@ def wav2cubes(wavfile, num_frames=20, num_coefficient=40, max_seqlen=500):
 
 
 def main():
-    print(wav2cubes("/home/aksdmj/dataset/voxceleb1/voxceleb1_wav/A.J._Buckley/1zcIwhmdeo4_0000001.wav")[0].shape)
+    print(wav2cubes("/home/aksdmj/dataset/voxceleb1/voxceleb1_wav/A.J._Buckley/1zcIwhmdeo4_0000001.wav")[0])
 
 
 if __name__ == '__main__':

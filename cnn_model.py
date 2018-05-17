@@ -11,29 +11,26 @@ tfe.enable_eager_execution(device_policy=tfe.DEVICE_PLACEMENT_SILENT)
 LEARNING_RATE = 0.1
 
 
-class LSTMDvector(tf.keras.Model):
+class CNNDvector(tf.keras.Model):
     """
     input : 98 * (dynamic length /maximum 5) * 40
     out : 0.66 * total speaker[depends on your dataset] =  (trained-speaker)
     """
 
     def __init__(self, input_dim, out_dim, checkpoint_directory, device_name="cpu:0"):
-        super(LSTMDvector, self).__init__()
+        super(CNNDvector, self).__init__()
 
         self.input_dim = input_dim
         self.out_dim = out_dim
         self.checkpoint_directory = checkpoint_directory
         self.device_name = device_name
 
-        # lstm cell
-        self.rnn_cell = tf.nn.rnn_cell.BasicLSTMCell(256)
-
         # dense
         from tensorflow.python.ops import init_ops
 
-        self.dense1 = tf.layers.Dense(512, activation=tf.nn.crelu, kernel_initializer=init_ops.random_uniform_initializer())
+        self.dense1 = tf.layers.Dense(512, activation=tf.nn.relu, kernel_initializer=init_ops.random_uniform_initializer())
         self.batch1 = tf.layers.BatchNormalization()
-        self.dense2 = tf.layers.Dense(1024, activation=tf.nn.crelu, kernel_initializer=init_ops.random_uniform_initializer())
+        self.dense2 = tf.layers.Dense(1024, activation=tf.nn.relu, kernel_initializer=init_ops.random_uniform_initializer())
         self.batch2 = tf.layers.BatchNormalization()
 
         # dvector
@@ -48,33 +45,11 @@ class LSTMDvector(tf.keras.Model):
         self.loss_sum = 0
 
 
-    def __call__(self, X, seq_length, verbose=0, steps=None, training=False):
-        return self.predict(X, seq_length, verbose=0, steps=None, training=False)
+    def __call__(self, X, steps=None, training=False):
+        return self.predict(X, verbose=0, steps=None, training=False)
 
-    def predict(self, X, seq_length, verbose=0, steps=None, training=False):
-        # Get the number of samples within a batch
-        num_samples = tf.shape(X)[0]
-
-        # Initialize LSTM cell state with zeros
-        state = self.rnn_cell.zero_state(num_samples, dtype=tf.float32)
-
-        # Unstack
-        unstacked = tf.unstack(X, axis=1)
-        # Iterate through each timestep and append the predictions
-        outputs = []
-        for input_step in unstacked:
-            output, state = self.rnn_cell(input_step, state)
-            outputs.append(output)
-
-        # Stack outputs to (batch_size, time_steps, cell_size)
-        outputs = tf.stack(outputs, axis=1)
-
-        # Extract the output of the last time step, of each sample
-        idxs_last_output = tf.stack([tf.range(num_samples),
-                                     tf.cast(seq_length - 1, tf.int32)], axis=1)
-        final_output = tf.gather_nd(outputs, idxs_last_output)
-
-        x = self.dense1(final_output)
+    def predict(self, X, verbose=0, steps=None, training=False):
+        x = self.dense1(X)
         x = self.batch1(x, training=training)
         x = self.dense2(x)
         x = self.batch2(x, training=training)
@@ -83,15 +58,15 @@ class LSTMDvector(tf.keras.Model):
 
         return x
 
-    def loss(self, x, target, seqlen, training=False):
-        predictions = self.predict(x, seqlen, training=training)
+    def loss(self, x, target, training=False):
+        predictions = self.predict(x, training=training)
         loss_value = tf.losses.sparse_softmax_cross_entropy(logits=predictions, labels=target)
         self.loss_sum += loss_value
         return loss_value
 
-    def grads(self, x, target, seqlen, training=False):
+    def grads(self, x, target, training=False):
         with tfe.GradientTape() as tape:
-            loss_value = self.loss(x, target, seqlen, training=training)
+            loss_value = self.loss(x, target, training=training)
         return tape.gradient(loss_value, self.variables)
 
     def fit(self,
@@ -112,12 +87,12 @@ class LSTMDvector(tf.keras.Model):
             for i in range(epochs):
                 self.total_step += 1
                 self.loss_sum = 0
-                for X, y, seqlen in tfe.Iterator(train_data):
-                    grads = self.grads(x=X, target=y, seqlen=seqlen, training=True)
+                for X, y in tfe.Iterator(train_data):
+                    grads = self.grads(x=X, target=y, training=True)
                     self.optimizer.apply_gradients(zip(grads, self.variables))
                 if (i == 0) | ((i + 1) % verbose == 0):
-                    for X, y, seqlen in tfe.Iterator(train_data):
-                        logits = self.predict(X, seqlen, False)
+                    for X, y in tfe.Iterator(train_data):
+                        logits = self.predict(X, False)
                         preds = tf.argmax(logits, axis=1)
                         train_acc(preds, y)
 
@@ -127,8 +102,8 @@ class LSTMDvector(tf.keras.Model):
                     train_acc.init_variables()
 
                     # Check accuracy eval dataset
-                    for X, y, seqlen in tfe.Iterator(eval_data):
-                        logits = self.predict(X, seqlen, False)
+                    for X, y in tfe.Iterator(eval_data):
+                        logits = self.predict(X, False)
                         preds = tf.argmax(logits, axis=1)
                         eval_acc(preds, y)
 
@@ -153,7 +128,7 @@ class LSTMDvector(tf.keras.Model):
 def main():
     import glob
     import h5py
-
+    
     num_data = 80
 
     X = list()
@@ -165,37 +140,38 @@ def main():
         h5f = h5py.File(fname, 'r')
         X.append(h5f['speechs'][:].astype(np.float32))
         y += h5f['labels'][:].tolist()
-        seq += h5f['seqs'][:].tolist()
         h5f.close()
 
     X = np.concatenate(X, axis=0)
     y = np.array(y)
-    seq = np.array(seq) / 100
 
-    print X.shape, y.shape, seq.shape
+    print X.shape, y.shape
 
-    X_5 = list()
-    for i in range(5):
-        X_5.append(X[:, i * 100:i * 100 + 98, :])
-    X = np.array(X_5)
-    X = X.swapaxes(0, 1)
-    X = X.reshape(-1, 5, 98 * 40)
+    # X_5 = list()
+    # for i in range(5):
+    #     X_5.append(X[:, i * 100:i * 100 + 98, :])
+    # X = np.array(X_5)
+    # X = X.swapaxes(0, 1)
+    # X = X.reshape(-1, 5, 98 * 40)
+    X = X.reshape(-1,500*40)
+
+
 
     num_classes = 10 * num_data
     num_train = len(X)
 
     from sklearn.model_selection import train_test_split
 
-    X_train, X_test, y_train, y_test, seq_train, seq_test = train_test_split(X, y, seq, test_size=0.33, random_state=42)
-    del X, y, seq
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=42)
+    del X, y
     import gc
     gc.collect()
-    ds_train = tf.data.Dataset.from_tensor_slices((X_train, y_train, seq_train)).shuffle(buffer_size=num_train).batch(128)
-    ds_test = tf.data.Dataset.from_tensor_slices((X_test, y_test, seq_test)).shuffle(buffer_size=num_train).batch(128)
+    ds_train = tf.data.Dataset.from_tensor_slices((X_train, y_train)).shuffle(buffer_size=num_train).batch(128)
+    ds_test = tf.data.Dataset.from_tensor_slices((X_test, y_test)).shuffle(buffer_size=num_train).batch(128)
 
-    model = LSTMDvector((98 * 40,), num_classes, "checkpoints/", device_name="gpu:0")
+    model = CNNDvector((98 * 40,), num_classes, "checkpoints/", device_name="gpu:0")
 
-    model.fit(ds_train, ds_test, epochs=100000, verbose=50)
+    model.fit(ds_train, ds_test, epochs=100000, verbose=1)
 
 
 if __name__ == "__main__":
