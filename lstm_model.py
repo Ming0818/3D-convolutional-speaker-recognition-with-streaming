@@ -26,21 +26,21 @@ class LSTMDvector(tf.keras.Model):
         self.device_name = device_name
 
         # lstm cell
-        self.rnn_cell = tf.nn.rnn_cell.BasicLSTMCell(256)
+        self.rnn_cell = tf.nn.rnn_cell.BasicLSTMCell(512)
 
         # dense
         from tensorflow.python.ops import init_ops
 
-        self.dense1 = tf.layers.Dense(1024, activation=tf.nn.sigmoid, kernel_initializer=init_ops.random_uniform_initializer())
+        self.dense1 = tf.layers.Dense(2048, activation=tf.nn.relu, kernel_initializer=init_ops.random_uniform_initializer())
         self.batch1 = tf.layers.BatchNormalization()
-        self.dense2 = tf.layers.Dense(512, activation=tf.nn.relu, kernel_initializer=init_ops.random_uniform_initializer())
+        self.dense2 = tf.layers.Dense(1024, activation=tf.nn.relu, kernel_initializer=init_ops.random_uniform_initializer())
         self.batch2 = tf.layers.BatchNormalization()
-        self.dense3 = tf.layers.Dense(256, activation=tf.nn.relu, kernel_initializer=init_ops.random_uniform_initializer())
+        self.dense3 = tf.layers.Dense(512, activation=tf.nn.relu, kernel_initializer=init_ops.random_uniform_initializer())
         self.batch3 = tf.layers.BatchNormalization()
 
         # dvector
         self.dvector = tf.layers.Dense(512, kernel_initializer=init_ops.random_uniform_initializer())
-
+        self.dropout = tf.layers.Dropout()
         self.trainprob = tf.layers.Dense(out_dim, kernel_initializer=init_ops.random_uniform_initializer())
 
         self.optimizer = tf.train.AdamOptimizer(LEARNING_RATE)
@@ -83,6 +83,7 @@ class LSTMDvector(tf.keras.Model):
         x = self.dense3(x)
         x = self.batch3(x, training=training)
         x = self.dvector(x)
+        x = self.dropout(x)
         x = self.trainprob(x)
 
         return x
@@ -162,7 +163,7 @@ def main():
     import glob
     import h5py
 
-    num_data = 2
+    num_data = 50
 
     X = list()
     y = list()
@@ -198,12 +199,12 @@ def main():
     del X, y, seq
     import gc
     gc.collect()
-    ds_train = tf.data.Dataset.from_tensor_slices((X_train, y_train, seq_train)).shuffle(buffer_size=num_train).batch(16)
-    ds_test = tf.data.Dataset.from_tensor_slices((X_test, y_test, seq_test)).shuffle(buffer_size=num_train).batch(16)
+    ds_train = tf.data.Dataset.from_tensor_slices((X_train, y_train, seq_train)).shuffle(buffer_size=num_train).batch(32)
+    ds_test = tf.data.Dataset.from_tensor_slices((X_test, y_test, seq_test)).shuffle(buffer_size=num_train).batch(32)
 
     model = LSTMDvector((98 * 40,), num_classes, "checkpoints/", device_name="gpu:0")
 
-    model.fit(ds_train, ds_test, epochs=100000, verbose=50)
+    model.fit(ds_train, ds_test, epochs=100000, verbose=1)
 
 
 if __name__ == "__main__":
