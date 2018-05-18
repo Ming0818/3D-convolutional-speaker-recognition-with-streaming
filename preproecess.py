@@ -1,11 +1,9 @@
 import numpy as np
 import speechpy
-import pyaudio
-import wave
-import time
 import soundfile as sf
-import sys
-
+from scipy.io import wavfile
+from scipy import signal
+import soundfile as sf
 
 def chunk2cube(chunk, sampling_frequency, num_coefficient=40, frame_length=0.025, frame_stride=0.01):
     npdata = np.fromstring(chunk, dtype=np.int16)
@@ -19,7 +17,6 @@ def chunk2cube(chunk, sampling_frequency, num_coefficient=40, frame_length=0.025
                                       high_frequency=None)
     # total sampling
     return logenergy.astype(np.float32), len(logenergy)
-
     # random sampling
     # feature_cube = np.zeros((10, 20, num_coefficient), dtype=np.float32)
     #
@@ -29,8 +26,16 @@ def chunk2cube(chunk, sampling_frequency, num_coefficient=40, frame_length=0.025
     #
     # return feature_cube[None, :, :, :]
 
+def wav2spectrogram(wavf, start_point=0, num_frames=16000):
+    samples, sample_rate = sf.read(wavf, start=start_point, frames=num_frames)
+    if len(samples) < num_frames:
+        # samples = np.concatenate((samples, np.zeros(num_frames-samples)))
+        return None
+    freq, t, Sxx = signal.spectrogram(samples, sample_rate)
 
-def wav2cubes(wavfile, num_frames=20, num_coefficient=40, max_seqlen=500):
+    return Sxx
+
+def wav2lmfes(wavfile, num_frames=20, num_coefficient=40, max_seqlen=500):
     # 500 frames
     signal, fs = sf.read(wavfile, dtype="float32", frames=((max_seqlen+1)*160))
 
@@ -73,7 +78,8 @@ def wav2cubes(wavfile, num_frames=20, num_coefficient=40, max_seqlen=500):
 
 
 def main():
-    print(wav2cubes("/home/aksdmj/dataset/voxceleb1/voxceleb1_wav/A.J._Buckley/1zcIwhmdeo4_0000001.wav")[0])
+    print(wav2spectrogram("/home/aksdmj/dataset/voxceleb1/voxceleb1_wav/A.J._Buckley/1zcIwhmdeo4_0000001.wav").shape)
+
 
 
 if __name__ == '__main__':

@@ -50,9 +50,9 @@ class CNNDvector(tf.keras.Model):
 
     def predict(self, X, verbose=0, steps=None, training=False):
         x = self.dense1(X)
-        x = self.batch1(x, training=training)
+        # x = self.batch1(x, training=training)
         x = self.dense2(x)
-        x = self.batch2(x, training=training)
+        # x = self.batch2(x, training=training)
         x = self.dvector(x)
         x = self.trainprob(x)
 
@@ -128,7 +128,7 @@ class CNNDvector(tf.keras.Model):
 def main():
     import glob
     import h5py
-    
+
     num_data = 80
 
     X = list()
@@ -166,8 +166,8 @@ def main():
     del X, y
     import gc
     gc.collect()
-    ds_train = tf.data.Dataset.from_tensor_slices((X_train, y_train)).shuffle(buffer_size=num_train).batch(128)
-    ds_test = tf.data.Dataset.from_tensor_slices((X_test, y_test)).shuffle(buffer_size=num_train).batch(128)
+    ds_train = tf.data.Dataset.from_tensor_slices((X_train, y_train)).shuffle(buffer_size=num_train).batch(1)
+    ds_test = tf.data.Dataset.from_tensor_slices((X_test, y_test)).shuffle(buffer_size=num_train).batch(1)
 
     model = CNNDvector((98 * 40,), num_classes, "checkpoints/", device_name="gpu:0")
 

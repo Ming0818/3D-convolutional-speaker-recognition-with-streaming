@@ -8,7 +8,7 @@ import time
 tfe.enable_eager_execution(device_policy=tfe.DEVICE_PLACEMENT_SILENT)
 
 # Hyper parameters
-LEARNING_RATE = 0.1
+LEARNING_RATE = 0.001
 
 
 class LSTMDvector(tf.keras.Model):
@@ -31,15 +31,17 @@ class LSTMDvector(tf.keras.Model):
         # dense
         from tensorflow.python.ops import init_ops
 
-        self.dense1 = tf.layers.Dense(512, activation=tf.nn.crelu, kernel_initializer=init_ops.random_uniform_initializer())
+        self.dense1 = tf.layers.Dense(1024, activation=tf.nn.sigmoid, kernel_initializer=init_ops.random_uniform_initializer())
         self.batch1 = tf.layers.BatchNormalization()
-        self.dense2 = tf.layers.Dense(1024, activation=tf.nn.crelu, kernel_initializer=init_ops.random_uniform_initializer())
+        self.dense2 = tf.layers.Dense(512, activation=tf.nn.relu, kernel_initializer=init_ops.random_uniform_initializer())
         self.batch2 = tf.layers.BatchNormalization()
+        self.dense3 = tf.layers.Dense(256, activation=tf.nn.relu, kernel_initializer=init_ops.random_uniform_initializer())
+        self.batch3 = tf.layers.BatchNormalization()
 
         # dvector
         self.dvector = tf.layers.Dense(512, kernel_initializer=init_ops.random_uniform_initializer())
 
-        self.trainprob = tf.layers.Dense(out_dim, activation=tf.nn.softmax, kernel_initializer=init_ops.random_uniform_initializer())
+        self.trainprob = tf.layers.Dense(out_dim, kernel_initializer=init_ops.random_uniform_initializer())
 
         self.optimizer = tf.train.AdamOptimizer(LEARNING_RATE)
 
@@ -78,6 +80,8 @@ class LSTMDvector(tf.keras.Model):
         x = self.batch1(x, training=training)
         x = self.dense2(x)
         x = self.batch2(x, training=training)
+        x = self.dense3(x)
+        x = self.batch3(x, training=training)
         x = self.dvector(x)
         x = self.trainprob(x)
 
@@ -127,10 +131,14 @@ class LSTMDvector(tf.keras.Model):
                     train_acc.init_variables()
 
                     # Check accuracy eval dataset
+                    temp = [0 for answers in range(self.out_dim)]
                     for X, y, seqlen in tfe.Iterator(eval_data):
                         logits = self.predict(X, seqlen, False)
                         preds = tf.argmax(logits, axis=1)
+                        for label in preds.numpy():
+                            temp[label] += 1
                         eval_acc(preds, y)
+                    print(temp)
 
                     self.history['eval_acc'].append(eval_acc.result().numpy())
 
@@ -154,7 +162,7 @@ def main():
     import glob
     import h5py
 
-    num_data = 80
+    num_data = 2
 
     X = list()
     y = list()
@@ -190,8 +198,8 @@ def main():
     del X, y, seq
     import gc
     gc.collect()
-    ds_train = tf.data.Dataset.from_tensor_slices((X_train, y_train, seq_train)).shuffle(buffer_size=num_train).batch(128)
-    ds_test = tf.data.Dataset.from_tensor_slices((X_test, y_test, seq_test)).shuffle(buffer_size=num_train).batch(128)
+    ds_train = tf.data.Dataset.from_tensor_slices((X_train, y_train, seq_train)).shuffle(buffer_size=num_train).batch(16)
+    ds_test = tf.data.Dataset.from_tensor_slices((X_test, y_test, seq_test)).shuffle(buffer_size=num_train).batch(16)
 
     model = LSTMDvector((98 * 40,), num_classes, "checkpoints/", device_name="gpu:0")
 

@@ -1,6 +1,10 @@
 import tensorflow as tf
 import tensorflow.contrib.eager as tfe
 import numpy as np
+from glob import glob
+
+from colorama import Fore, Style
+import time
 
 # eager execution
 tfe.enable_eager_execution(device_policy=tfe.DEVICE_PLACEMENT_SILENT)
@@ -8,6 +12,9 @@ tfe.enable_eager_execution(device_policy=tfe.DEVICE_PLACEMENT_SILENT)
 # Hyper parameters
 LEARNING_RATE = 0.01
 
+layers = tf.keras.layers
+
+LEARNING_RATE = 0.01
 layers = tf.keras.layers
 
 
@@ -200,14 +207,21 @@ class DVectorNet(tf.keras.Model):
         self.l5b = id_block([512, 512, 2048], stage=5, block='b')
         self.l5c = id_block([512, 512, 2048], stage=5, block='c')
 
-        # self.avg_pool = layers.AveragePooling2D(
-        #     (7, 7), strides=(7, 7), data_format='channels_first')
+        self.avg_pool = layers.AveragePooling2D(
+            (7, 7), strides=(7, 7))
 
         self.flatten = layers.Flatten()
-        self.dvector = layers.Dense(2048, name='dvector', activation=tf.nn.relu)
-        self.fc1000 = layers.Dense(out_dim, name='fc1000', activation=tf.nn.softmax)
+        self.dense1 = layers.Dense(256, name='dense1', activation=tf.nn.relu)
+        self.dense2 = layers.Dense(128, name='dense2', activation=tf.nn.relu)
+        self.dvector = layers.Dense(64, name='dvector', activation=tf.nn.relu)
+
+        self.fc1000 = layers.Dense(out_dim, name='fc1000')
 
         self.optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE)
+
+        self.time = time.time()
+        self.total_step = 0
+        self.loss_sum = 0
 
     def call(self, input_tensor, training=False):
         x = self.conv1(input_tensor)
@@ -235,37 +249,64 @@ class DVectorNet(tf.keras.Model):
         x = self.l5b(x, training=training)
         x = self.l5c(x, training=training)
 
+        #         print x.shape
+        #         x = self.avg_pool(x)
+        x = self.dense1(x)
+        x = self.dense2(x)
         x = self.dvector(self.flatten(x))
 
         x = self.fc1000(x)
         return x
 
-    def loss(self, input_tensor, target, training=False):
-        predictions = self.call(input_tensor, training=training)
-        loss_value = tf.losses.softmax_cross_entropy(logits=predictions, onehot_labels=target)
-        self.loss_sum+=loss_value
+    def predict(self, X, training=False):
+        x = self.conv1(X)
+        x = self.bn_conv1(x, training=training)
+
+        x = tf.nn.relu(x)
+        x = self.max_pool(x)
+
+        x = self.l2a(x, training=training)
+        x = self.l2b(x, training=training)
+        x = self.l2c(x, training=training)
+
+        x = self.l3a(x, training=training)
+        x = self.l3b(x, training=training)
+        x = self.l3c(x, training=training)
+        x = self.l3d(x, training=training)
+
+        x = self.l4a(x, training=training)
+        x = self.l4b(x, training=training)
+        x = self.l4c(x, training=training)
+        x = self.l4d(x, training=training)
+        x = self.l4e(x, training=training)
+        x = self.l4f(x, training=training)
+
+        x = self.l5a(x, training=training)
+        x = self.l5b(x, training=training)
+        x = self.l5c(x, training=training)
+
+        #         x = self.avg_pool(x)
+
+        x = self.dvector(self.flatten(x))
+        x = self.fc1000(x)
+        return x
+
+    def loss(self, x, target, training=False):
+        predictions = self.predict(x, training=training)
+        loss_value = tf.losses.sparse_softmax_cross_entropy(logits=predictions, labels=target)
+        self.loss_sum += loss_value
         return loss_value
 
-    def grads(self, input_tensor, target, training=False):
+    def grads(self, x, target, training=False):
         with tfe.GradientTape() as tape:
-            loss_value = self.loss(input_tensor, target, training=training)
+            loss_value = self.loss(x, target, training=training)
         return tape.gradient(loss_value, self.variables)
 
     def fit(self,
             train_data=None,
             eval_data=None,
-            batch_size=None,
             epochs=500,
             verbose=1,
-            callbacks=None,
-            validation_split=0.,
-            validation_data=None,
-            shuffle=True,
-            class_weight=None,
-            sample_weight=None,
-            initial_epoch=0,
-            steps_per_epoch=None,
-            validation_steps=None,
             **kwargs):
 
         train_acc = tfe.metrics.Accuracy('train_acc')
@@ -277,67 +318,113 @@ class DVectorNet(tf.keras.Model):
 
         with tf.device(self.device_name):
             for i in range(epochs):
+                self.total_step += 1
                 self.loss_sum = 0
+                temp = False
+
                 for X, y in tfe.Iterator(train_data):
-                    grads = self.grads(input_tensor=X, target=y, training=True)
+                    if i == 0 and temp:
+                        print(self.predict(X=X, training=False)[0])
+                    grads = self.grads(x=X, target=y, training=True)
+
+                    if i == 0 and temp:
+                        print("grads=======")
+                        print(grads)
+                        print "==========="
+                        temp = False
+
                     self.optimizer.apply_gradients(zip(grads, self.variables))
-
-                for X, y in tfe.Iterator(train_data):
-                    logits = self.call(input_tensor=X, training=False)
-                    preds = tf.argmax(logits, axis=1)
-
-                    train_acc(preds, np.argmax(y, axis=1))
-
-                self.history['train_acc'].append(train_acc.result().numpy())
-
-                train_acc.init_variables()
-
-                # Check accuracy eval dataset
-                for X, y in tfe.Iterator(eval_data):
-                    logits = self.call(input_tensor=X, training=False)
-                    preds = tf.argmax(logits, axis=1)
-                    eval_acc(preds, np.argmax(y, axis=1))
-                self.history['eval_acc'].append(eval_acc.result().numpy())
-                # Reset metrics
-                eval_acc.init_variables()
-
+                temp = True
                 if (i == 0) | ((i + 1) % verbose == 0):
-                    print('Train accuracy at epoch %d: ' % (i + 1), self.history['train_acc'][-1])
-                    print('Eval accuracy at epoch %d: ' % (i + 1), self.history['eval_acc'][-1])
-                    print('Loss : %s' % self.loss_sum)
+                    for X, y in tfe.Iterator(train_data):
+                        logits = self.predict(X=X, training=False)
+                        preds = tf.argmax(logits, axis=1)
+                        if temp:
+                            print(logits[0])
+                            print(preds[0], y[0])
+                            temp = False
+                        train_acc(preds, y)
+
+                    self.history['train_acc'].append(train_acc.result().numpy())
+
+                    # Reset metrics
+                    train_acc.init_variables()
+
+                    # Check accuracy eval dataset
+                    temp = [0 for j in range(NUM_CLASS)]
+                    for X, y in tfe.Iterator(eval_data):
+                        logits = self.predict(X=X, training=False)
+                        preds = tf.argmax(logits, axis=1)
+                        for lab in preds.numpy():
+                            temp[lab] += 1
+                        eval_acc(preds, y)
+                    print(temp)
+
+                    self.history['eval_acc'].append(eval_acc.result().numpy())
+
+                    # Reset metrics
+                    eval_acc.init_variables()
+                    print(Fore.CYAN + '[EPOCH %d]/%.2fsec ============================' % (
+                    (i + 1), time.time() - self.time))
+                    self.time = time.time()
+                    print(Fore.MAGENTA + 'Train accuracy at step %d: %5f%%' % (
+                        self.total_step, 100.0 * self.history['train_acc'][-1]))
+                    print(Fore.BLUE + 'Eval  accuracy at step %d: %5f%%' % (
+                        self.total_step, 100.0 * self.history['eval_acc'][-1]))
+                    print(Fore.RED + 'Loss     value at step %d: %5f' % (
+                    self.total_step, self.loss_sum) + Style.RESET_ALL)
+                    self.save(global_step=self.total_step)
+
+    def save(self, global_step=0):
+        tfe.Saver(self.variables).save(self.checkpoint_directory, global_step=global_step)
 
 
 def main():
-    from glob import glob
+    import glob
     import h5py
-    xs = list()
-    ys = list()
 
-    for i, fname in enumerate(glob("data_array/*_0.h5")+glob("data_array/*_1.h5")+glob("data_array/*_2.h5")):
-        print
+    num_data = 2
+
+    X = list()
+    y = list()
+    seq = list()
+
+    for i in range(num_data):
+        fname = "data_lmfe/data_%d.h5" % i
         h5f = h5py.File(fname, 'r')
-        xs.append(h5f['speechs'][:].astype(np.float32))
-        ys.append(h5f['labels'][:])
+        X.append(h5f['speechs'][:].astype(np.float32))
+        y += h5f['labels'][:].tolist()
+        seq += h5f['seqs'][:].tolist()
         h5f.close()
 
-    xs = np.concatenate(xs, axis=0)
-    ys = np.concatenate(ys, axis=0)
+    X = np.concatenate(X, axis=0)
+    y = np.array(y)
+    seq = np.array(seq) / 100
 
-    num_classes = 90
-    targets =ys.reshape(-1)
-    one_hot = np.eye(num_classes)[targets].astype("float32")
-    ys =one_hot
+    print X.shape, y.shape, seq.shape
+
+    X_5 = list()
+    for i in range(5):
+        X_5.append(X[:, i * 100:i * 100 + 98, :])
+    X = np.array(X_5)
+    X = X.swapaxes(0, 1)
+    X = X.reshape(-1, 5, 98 * 40)
+
+    num_classes = 10 * num_data
+    num_train = len(X)
+
     from sklearn.model_selection import train_test_split
 
-    xs_train, xs_test, ys_train, ys_test = train_test_split(xs, ys, test_size=0.33, random_state=42)
-    del xs, ys
-    ds_train = tf.data.Dataset.from_tensor_slices((xs_train, ys_train)).shuffle(buffer_size=10000).batch(32)
-    ds_test = tf.data.Dataset.from_tensor_slices((xs_test, ys_test)).shuffle(buffer_size=10000).batch(32)
+    X_train, X_test, y_train, y_test, seq_train, seq_test = train_test_split(X, y, seq, test_size=0.33, random_state=42)
+    del X, y, seq
+    import gc
+    gc.collect()
+    ds_train = tf.data.Dataset.from_tensor_slices((X_train, y_train, seq_train)).shuffle(buffer_size=num_train).batch(128)
+    ds_test = tf.data.Dataset.from_tensor_slices((X_test, y_test, seq_test)).shuffle(buffer_size=num_train).batch(128)
 
-    model = DVectorNet((20, 40), num_classes, "./", device_name="gpu:0")
+    model = DVectorNet((98 * 40,), num_classes, "checkpoints/", device_name="gpu:0")
 
-    model.fit(ds_train, ds_test, epochs=100000, verbose=1)
-    model.save("temp.ckpt")
+    model.fit(ds_train, ds_test, epochs=100000, verbose=50)
 
 
 if __name__ == "__main__":
